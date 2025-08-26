@@ -36,7 +36,7 @@ import { fetchJSON } from './fetch.js';
 import { getAdminRulesets } from './admin.js';
 import { hasBroadHostPermissions } from './utils.js';
 import { rulesFromText } from './dnr-parser.js';
-import { ubolLog } from './debug.js';
+import { ubolErr, ubolLog } from './debug.js';
 
 /******************************************************************************/
 
@@ -209,7 +209,9 @@ async function updateRedirectRules(currentRules, addRules, removeRuleIds) {
     for ( const rule of currentRules ) {
         if ( rule.id >= SPECIAL_RULES_REALM ) { continue; }
         if ( rule.action.type !== 'redirect' ) { continue; }
-        if ( rule.action.redirect.extensionPath === undefined ) { continue; }
+        if ( rule.action.redirect.extensionPath === undefined ) {
+            if ( rule.action.redirect.regexSubstitution === undefined ) { continue; }
+        }
         removeRuleIds.push(rule.id);
     }
 
@@ -306,6 +308,9 @@ async function updateDynamicRules() {
     if ( dynamicRegexCount !== 0 ) {
         ubolLog(`Using ${dynamicRegexCount}/${dnr.MAX_NUMBER_OF_REGEX_RULES} dynamic regex-based DNR rules`);
     }
+
+    const response = {};
+
     try {
         await dnr.updateDynamicRules({ addRules, removeRuleIds });
         if ( removeRuleIds.length !== 0 ) {
@@ -315,9 +320,16 @@ async function updateDynamicRules() {
             ubolLog(`Add ${addRules.length} dynamic DNR rules`);
         }
     } catch(reason) {
-        console.error(`updateDynamicRules() / ${reason}`);
+        ubolErr(`updateDynamicRules/${reason}`);
+        response.error = `${reason}`;
     }
-    await updateSessionRules();
+
+    const result = await updateSessionRules();
+    if ( result?.error ) {
+        response.error ||= result.error;
+    }
+
+    return response;
 }
 
 /******************************************************************************/
@@ -452,6 +464,7 @@ async function updateSessionRules() {
     if ( sessionRegexCount !== 0 ) {
         ubolLog(`Using ${sessionRegexCount}/${dnr.MAX_NUMBER_OF_REGEX_RULES} session regex-based DNR rules`);
     }
+    const response = {};
     try {
         await dnr.updateSessionRules({ addRules, removeRuleIds });
         if ( removeRuleIds.length !== 0 ) {
@@ -461,8 +474,10 @@ async function updateSessionRules() {
             ubolLog(`Add ${addRules.length} session DNR rules`);
         }
     } catch(reason) {
-        console.error(`updateSessionRules() / ${reason}`);
+        ubolErr(`updateSessionRules/${reason}`);
+        response.error = `${reason}`;
     }
+    return response;
 }
 
 /******************************************************************************/
@@ -636,9 +651,7 @@ async function enableRulesets(ids) {
         disableRulesetSet.delete(id);
     }
 
-    if ( enableRulesetSet.size === 0 && disableRulesetSet.size === 0 ) {
-        return false;
-    }
+    if ( enableRulesetSet.size === 0 && disableRulesetSet.size === 0 ) { return; }
 
     const enableRulesetIds = Array.from(enableRulesetSet);
     const disableRulesetIds = Array.from(disableRulesetSet);
@@ -649,20 +662,34 @@ async function enableRulesets(ids) {
     if ( disableRulesetIds.length !== 0 ) {
         ubolLog(`Disable ruleset: ${disableRulesetIds}`);
     }
-    await dnr.updateEnabledRulesets({ enableRulesetIds, disableRulesetIds }).catch(reason => {
-        ubolLog(reason);
+
+    const response = {};
+
+    await dnr.updateEnabledRulesets({
+        enableRulesetIds,
+        disableRulesetIds,
+    }).catch(reason => {
+        ubolErr(`updateEnabledRulesets/${reason}`);
+        response.error = `${reason}`;
     });
 
-    await updateDynamicRules();
+    const result = await updateDynamicRules();
+    if ( result?.error ) {
+        response.error ||= result.error;
+    }
 
-    dnr.getEnabledRulesets().then(enabledRulesets => {
+    await dnr.getEnabledRulesets().then(enabledRulesets => {
         ubolLog(`Enabled rulesets: ${enabledRulesets}`);
+        response.enabledRulesets = enabledRulesets;
         return dnr.getAvailableStaticRuleCount();
     }).then(count => {
         ubolLog(`Available static rule count: ${count}`);
+        response.staticRuleCount = count;
+    }).catch(reason => {
+        ubolErr(`getEnabledRulesets/${reason}`);
     });
 
-    return true;
+    return response;
 }
 
 /******************************************************************************/
@@ -756,7 +783,7 @@ async function updateUserRules() {
         out.added = addRules.length;
         out.removed = removeRuleIds.length;
     } catch(reason) {
-        console.info(`updateUserRules() / ${reason}`);
+        ubolErr(`updateUserRules/${reason}`);
         out.errors.push(`${reason}`);
     } finally {
         const userRules = await getEffectiveUserRules();

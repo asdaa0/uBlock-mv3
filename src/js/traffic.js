@@ -221,8 +221,15 @@ const onBeforeRootFrameRequest = function(fctxt) {
 
     // Blocked
 
+    let reason = logData.reason;
+
     // Find out the URL navigated to should the document not be strict-blocked
     pageStore.skipMainDocument(fctxt, false);
+
+    if ( reason === undefined && Array.isArray(fctxt.filter) ) {
+        const filter = fctxt.filter.find(a => a.reason !== undefined);
+        reason = filter?.reason;
+    }
 
     const query = {
         url: requestURL,
@@ -231,8 +238,8 @@ const onBeforeRootFrameRequest = function(fctxt) {
         hn: requestHostname,
         to: fctxt.redirectURL || '',
     };
-    if ( logData.reason ) {
-        query.reason = logData.reason;
+    if ( reason ) {
+        query.reason = reason;
     }
 
     vAPI.tabs.replace(
@@ -644,8 +651,9 @@ function textResponseFilterer(session, directives) {
             const json = session.getString();
             let obj;
             try { obj = JSON.parse(json); } catch { break; }
-            if ( cache.jsonp.apply(obj) === 0 ) { break; }
-            session.setString(cache.jsonp.toJSON(obj));
+            const objAfter = cache.jsonp.apply(obj);
+            if ( objAfter === undefined ) { break; }
+            session.setString(cache.jsonp.toJSON(objAfter));
             applied.push(directive);
             break;
         }
@@ -659,11 +667,12 @@ function textResponseFilterer(session, directives) {
                     linesAfter.push(lineBefore);
                     continue;
                 }
-                if ( cache.jsonp.apply(obj) === 0 ) {
+                const objAfter = cache.jsonp.apply(obj);
+                if ( objAfter === undefined ) {
                     linesAfter.push(lineBefore);
                     continue;
                 }
-                linesAfter.push(cache.jsonp.toJSON(obj));
+                linesAfter.push(cache.jsonp.toJSON(objAfter));
             }
             session.setString(linesAfter.join('\n'));
             break;
