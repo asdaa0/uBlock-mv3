@@ -58,8 +58,8 @@ For support, questions, or help, visit [/r/uBlockOrigin][Reddit].
 5. Restart Chrome
 
 ## Issues
-1. Occasionally it tries to inject into a nonexistent frame? No idea what's going on here
-2. Probably some of the MV2 APIs haven't been polyfilled yet so random parts are broken
+1. Occasionally it tries to inject into a nonexistent frame? ~~No idea what's going on here~~ This looks like it's a browser bug, uBlock Origin Lite has the same issues
+2. Probably some of the MV2 APIs haven't been polyfilled yet so random parts are broken. It seems to be work consistently though
 
 ## How It Works
 - `webRequestBlocking` is allowed on MV3 extensions if they are forceinstalled by policy or allowlisted via the command line
