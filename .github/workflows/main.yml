@@ -25,7 +25,10 @@ jobs:
           tools/pull-assets.sh
       - name: Get release information
         run: |
-          echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+          ref_name="${GITHUB_REF#refs/tags/}"
+          ref_name="${ref_name#refs/heads/}"
+          ref_name="${ref_name//\//_}"
+          echo "VERSION=$ref_name" >> $GITHUB_ENV
       - name: Build MV2 packages
         run: |
           tools/make-chromium.sh ${{ env.VERSION }}
