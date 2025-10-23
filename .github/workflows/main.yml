@@ -1,8 +1,6 @@
 name: uBO release
 
-on:
-  create:
-    branches: master
+on: workflow_dispatch
 
 permissions:
   contents: read
